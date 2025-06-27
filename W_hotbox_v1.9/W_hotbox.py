@@ -655,7 +655,7 @@ class NodeButtons(QtWidgets.QVBoxLayout):
                 # Execute rule
                 scope = {'nuke': nuke, 'selectedNodes': selectedNodes}
                 exec(ruleString, scope, scope)
-                ret = scope['ret']
+                ret = scope.get('ret', False)
             
             # Cache the result
             _ruleValidationCache[cacheKey] = ret

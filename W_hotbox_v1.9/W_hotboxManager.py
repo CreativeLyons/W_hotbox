@@ -1642,7 +1642,7 @@ class ColorSwatch(QtWidgets.QLabel):
 
         self.enabled = mode
         self.setAcceptDrops(mode)
-        self.setColor(adjustChild = False, indirect = True)
+        self.setColor(self.color, adjustChild = False, indirect = True)
 
     def getColor(self):
         '''
@@ -2580,6 +2580,19 @@ class ScriptEditorTemplateMenu(QtWidgets.QMenu):
                 self.parent.loadTemplate(action.data())
 
         super(ScriptEditorTemplateMenu, self).mouseReleaseEvent(event)
+
+    def initMenu(self):
+        '''
+        Initialize or refresh the template menu.
+        '''
+        self.populateMenu()
+
+    def enableMenuItems(self):
+        '''
+        Enable or disable template menu items as needed.
+        Currently, refresh the menu to reflect any changes.
+        '''
+        self.populateMenu()
 
 #------------------------------------------------------------------------------------------------------
 #Tree View
