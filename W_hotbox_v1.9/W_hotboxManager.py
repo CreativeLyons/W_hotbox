@@ -755,10 +755,9 @@ class HotboxManager(QtWidgets.QWidget):
             self.classesList.setEnabled(False)
 
         if self.contextual:
-            # Use cached directory listing
-            allItems = listDirWithCache(self.path)
-            allItems = [folder for folder in allItems if os.path.isdir(os.path.join(self.path, folder)) and folder[0] not in ['.','_']]
-            allItems.sort(key=lambda s: s.lower())
+            #sort items found on disk
+            allItems = sorted(os.listdir(self.path), key=lambda s: s.lower())
+            allItems = [folder for folder in allItems if os.path.isdir(self.path + '/' + folder) and folder[0] not in ['.','_']]
 
             #add items
             self.classesList.addItems(allItems)
@@ -1480,7 +1479,10 @@ class QListWidgetCustom(QtWidgets.QListWidget):
 
         #change color
         color = [self.hotboxManager.lockedColor, self.hotboxManager.activeColor][int(mode)]
-        self.setStyleSheet('background-color : %s'%color)
+        # Set background and text color for readability
+        self.setStyleSheet('background-color: %s; color: #eeeeee;' % color)
+        # Propagate enable/disable state
+        super(QListWidgetCustom, self).setEnabled(mode)
 
     def itemSelected(self):
 
@@ -1506,7 +1508,7 @@ class QListWidgetCustom(QtWidgets.QListWidget):
             item = self.item(index) 
             fileName = item.text()
 
-            checkState = int(item.checkState())
+            checkState = 1 if item.checkState() == QtCore.Qt.Checked else 0
 
             newRulePath, origRulePath = [self.hotboxManager.path + '/' + fileName + ('_' * index) for index in range(2)][::(checkState - 1)]
 
@@ -1541,25 +1543,110 @@ class ColorSwatch(QtWidgets.QLabel):
     def __init__(self, color):
         super(ColorSwatch, self).__init__()
 
-        self.setFixedWidth(20)
-        self.setFixedHeight(20)
+        self.color = None
+        self.enabled = False
+        self.active = False
+        self.child = None
+        self.parent = None
+
+        self.size = 12
+        self.setFixedHeight(self.size)
+        self.setFixedWidth(self.size)
+
+        self.painter = QtGui.QPainter()
+
+        #set line color to black
+        self.lineColor = '#000000'
+
+        #painter
+        self.paintPen = QtGui.QPen()
+        self.paintPen.setColor(QtGui.QColor(0,0,0))
+        self.paintPen.setWidthF(1.5)
+
+        self.defaultColor = color
+        self.defaultColorInverted = self.invertColor(self.defaultColor)
+        self.lockedColor = '#262626'
 
         self.setColor(color)
 
-        self.child = None
+        #Tooltip
+        self.assignToolTip()
 
-    def setColor(self, color, adjustChild = True, indirect = False):
+    def assignToolTip(self, child = False):
+        '''
+        Set the tooltip
+        '''
+        childSpecificToolTip = ['','','']
+
+        if child:
+            childSpecificToolTip = ['text ',
+                                    " When set to default this color will adjust upon altering the button's color in order to remain readable."
+                                    " This behaviour can be turned off by disabling 'Auto adjust text color' in the preferences",
+                                    " Invert default color."]
+
+        self.toolTipText = ("<p>Change the button's %scolor.</p>"
+                        "<p>/ indicates the color is set to default.%s</p>"
+                        "<ul>"
+                        "<li><b>LMB</b> Open color picker to set a custom color.</li>"
+                        "<li><b>RMB</b> Revert to default color.%s</li>"
+                        "<li><b>CTRL + LMB</b>  Paste color from clipboard.</li>"
+                        "<li><b>CTRL + RMB</b> Copy color to clipboard.</li>"
+                        "<li><b>SHIFT + LMB</b> Set to color of selected node.</li>"
+                        "<li><b>SHIFT + RMB</b> Copy color to clipboard, formatted as a 32bit integer.</li>"
+                        "</ul>"%(childSpecificToolTip[0],childSpecificToolTip[1],childSpecificToolTip[2])
+                        )
+
+        self.setToolTip(self.toolTipText)
+
+    def saveEvent(self):
+        '''
+        Emit save signal that can be picked up by parent class
+        '''
+        self.save.emit()
+
+    def invertColor(self, color):
+        '''
+        Return the inverted color value
+        '''
+        if not color:
+            return color
+
+        rgbColor = W_hotbox.hex2rgb(color)
+        inverted = [255-c for c in rgbColor]
+        return W_hotbox.rgb2hex(inverted)
+
+    def setColor(self, color = None, adjustChild = True, indirect = False):
         '''
         Set color of the swatch.
+        'Indirect' parameter reflects whether the method was called directly by the user, or as a side effect.
         '''
-        if not indirect:
-            self.color = color
-            self.setStyleSheet('background:rgb(%d,%d,%d)'%(tuple([i*255 for i in getColorWithCache(color, 'hex')])))
 
-            # Check if the child attribute exists and then check if it's not None
-            # This provides better backward compatibility with different Nuke versions
-            if adjustChild and hasattr(self, 'child') and self.child is not None:
-                self.child.setColor(self.getTextColor())
+        colorChanged = False
+
+        #if swatch not enabled, set to locked color
+        if not self.enabled:
+            color = self.lockedColor
+
+        else:
+            #if no color specified, set to default color
+            if not color:
+                color = self.defaultColor
+
+            #if new color is the same as the current color
+            if color != self.color:
+                colorChanged = True
+
+        #set color
+        self.color = color
+        self.setStyleSheet('QLabel {border: 1px solid %s; background-color : %s}'%(self.lineColor, self.color))
+
+        #set child color. If the color of the child was changed, make sure the colorChanged variable is forced to True
+        if adjustChild:
+            colorChanged = bool(colorChanged + self.setChildColor())
+
+        #save changes to file if conditions are met.
+        if self.enabled and colorChanged and not indirect:
+            self.saveEvent()
 
     def getTextColor(self):
         '''
@@ -1569,21 +1656,7 @@ class ColorSwatch(QtWidgets.QLabel):
         luminance = (0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2])
         return '#000000' if luminance > .5 else '#ffffff'
 
-    def mousePressEvent(self, event):
-        '''
-        When clicked, open color picker.
-        '''
-        if event.button() == QtCore.Qt.LeftButton:
-            self.openColorPicker()
 
-    def openColorPicker(self):
-        '''
-        Open color picker and update swatch.
-        '''
-        color = QtWidgets.QColorDialog.getColor()
-        if color.isValid():
-            self.setColor(getColorWithCache(tuple([i/255.0 for i in color.getRgb()[:3]]), 'rgb'))
-            self.save.emit()
 
     def enterEvent(self, event):
         '''
@@ -1601,6 +1674,59 @@ class ColorSwatch(QtWidgets.QLabel):
         '''
         if self.enabled:
             self.active = False
+        return False
+
+    def mouseReleaseEvent(self,event):
+        '''
+        Set the color of the button
+        '''
+        if self.enabled and self.active:
+
+            #Control key pressed
+            if QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier:
+
+                #left click
+                if event.button() == QtCore.Qt.LeftButton:
+                    self.colorFromSelection()
+
+                #right click
+                else:
+                    self.copyColorInterface()
+
+            #Control key pressed
+            elif QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ControlModifier:
+
+                #left click
+                if event.button() == QtCore.Qt.LeftButton:
+                    #paste color form clipboard
+                    self.pasteColorHex()
+
+                #right click
+                else:
+                    #copy color to clipboard
+                    self.copyColorHex()
+
+            #Control key not pressed
+            else:
+                #left click
+                if event.button() == QtCore.Qt.LeftButton:
+                    #set custom color
+                    self.getColor()
+
+                #right click
+                else:
+                    #set to default
+                    color = None
+
+                    #if already set to default, toggle between inverted and regular
+                    if self.parent:
+                        if self.color == self.defaultColor:
+                            color = self.defaultColorInverted
+
+                    self.setColor(color)
+
+            return True
+
         return False
 
     def dragEnterEvent(self, e):
@@ -2640,10 +2766,11 @@ class QTreeViewCustom(QtWidgets.QTreeView):
 
         self.enabled = mode
 
-        #change color
-        color = [self.parentClass.lockedColor,self.parentClass.activeColor][int(mode)]
-        self.setStyleSheet('background-color : %s'%color)
-
+        #change background and text color for readability
+        color = [self.parentClass.lockedColor, self.parentClass.activeColor][int(mode)]
+        self.setStyleSheet('background-color: %s; color: #eeeeee;' % color)
+        # Propagate enable/disable state
+        super(QTreeViewCustom, self).setEnabled(mode)
 
     def populateTree(self):
         '''
@@ -2670,7 +2797,7 @@ class QTreeViewCustom(QtWidgets.QTreeView):
             classItemText = classItem.text()
 
             if self.parentClass.mode == 'Rules':
-                if not int(classItem.checkState()):
+                if classItem.checkState() == QtCore.Qt.Unchecked:
                     classItemText += '_'
 
             self.scope = self.parentClass.path + '/' + classItemText + '/'
@@ -2698,7 +2825,7 @@ class QTreeViewCustom(QtWidgets.QTreeView):
         self.clearTree()
 
         #Fill the buttonstree if there is an item selected in the classescolumn, or the mode is set to all.
-        if not self.parentClass.contextual or self.parentClass.classesList.selectedItems() != 0:
+        if not self.parentClass.contextual or len(self.parentClass.classesList.selectedItems()) != 0:
             self.addChild(self.root,self.scope)
 
         #Expand/Collapse
@@ -2738,7 +2865,7 @@ class QTreeViewCustom(QtWidgets.QTreeView):
                 name = getAttributeFromFile(filePath)
 
                 if not name:
-                    return
+                    continue
 
                 child = QStandardItemChild(name,filePath)
                 parent.appendRow(child)
@@ -3773,10 +3900,10 @@ def getAttributeFromFile(filePath, attribute = 'name'):
     if not content:
         return ''
 
-    tag = '# %s: '%attribute
+    tag = '# %s: '%attribute.upper()
     for line in content.split('\n'):
-        if line.startswith(tag):
-            return line.split(tag)[-1]
+        if line.upper().startswith(tag):
+            return line.split(': ', 1)[-1]
     return ''
 
 def getScriptFromFile(filePath):
