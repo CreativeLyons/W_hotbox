@@ -829,7 +829,7 @@ class HotboxButton(QtWidgets.QLabel):
                 if self.filePath in _fileContentCache:
                     self.openFile = _fileContentCache[self.filePath].splitlines()
                 else:
-                    with open(name) as f:
+                    with open(self.filePath) as f:
                         content = f.read()
                     _fileContentCache[self.filePath] = content
                     self.openFile = content.splitlines()
@@ -891,13 +891,13 @@ class HotboxButton(QtWidgets.QLabel):
         '''
         Execute script attached to button
         '''
+        
+        node_context = nuke.root() if hotboxInstance.groupRoot == 'root' else nuke.toNode(hotboxInstance.groupRoot)
 
-        with nuke.toNode(hotboxInstance.groupRoot):
-
+        with node_context:
             try:
                 scope = globals().copy()
                 exec(self.function, scope, scope)
-
             except:
                 printError(traceback.format_exc(), self.filePath, self.text())
 
