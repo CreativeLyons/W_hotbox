@@ -838,7 +838,7 @@ class HotboxButton(QtWidgets.QLabel):
                 for index, line in enumerate(self.openFile):
 
                     if not line.startswith('#'):
-                        self.function = ''.join(self.openFile[index:])
+                        self.function = '\n'.join(self.openFile[index:])
                         break
 
                     header.append(line)
