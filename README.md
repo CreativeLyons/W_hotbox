@@ -1,6 +1,6 @@
 # W_hotbox for Nuke 16 - unofficial repo
 
-This is a modified version of Wouter Gilsing's W_hotbox for Nuke, updated to work with Nuke 16. There's now an official 2.0 release on Nukepedia. 
+This is a modified version of Wouter Gilsing's W_hotbox for Nuke, updated to work with Nuke 16. There's now an official 2.0 release on Nukepedia.
 
 ## Features
 
@@ -20,10 +20,14 @@ This fork has been specifically updated to be compatible with Nuke 16, which use
 - Maintains backward compatibility with older Nuke versions (11-15 use PySide2, 10 and earlier use PySide)
 - Improved error messaging for import issues
 
+## Bug Fixes
+
+- **macOS Event Handling Fix**: Fixed a critical bug on macOS (Tahoe) where button highlighting and clicking were unreliable when holding the backtick key. The issue was caused by conflicting event handlers between the centralized mouse move handler and individual button enter/leave events. The fix ensures only one button highlights at a time and buttons reliably respond to clicks, even when keys are held down.
+
 ## Installation
 
 1. Copy `W_hotbox.py` and `W_hotboxManager.py` to a folder in your Nuke plugin path (usually inside `~/.nuke`)
-  
+
 2. Append your `menu.py` with:
    ```python
    import W_hotbox, W_hotboxManager
